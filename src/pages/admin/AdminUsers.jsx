@@ -6,7 +6,7 @@ import { adminAdjustWallet } from '../../lib/api'
 import { formatCurrency } from '../../lib/constants'
 import {
   Users, Search, Shield, Ban, CheckCircle2, Wallet,
-  ChevronDown, ChevronUp, RefreshCw, AlertTriangle, X
+  ChevronDown, ChevronUp, RefreshCw, AlertTriangle, X, Building2
 } from 'lucide-react'
 import { formatDistanceToNow, format } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -20,11 +20,12 @@ export default function AdminUsers() {
   const [expanded, setExpanded] = useState(null)
   const [walletModal, setWalletModal] = useState(null) // { userId, name }
   const [walletForm, setWalletForm]   = useState({ amount: '', type: 'credit', reason: '' })
+  const [leagues, setLeagues]           = useState([]) // all leagues for wallet modal
   const [adjusting, setAdjusting]     = useState(false)
   const [suspendModal, setSuspendModal] = useState(null)
   const [suspendReason, setSuspendReason] = useState('')
 
-  useEffect(() => { loadUsers() }, [])
+  useEffect(() => { loadUsers(); loadLeagues() }, [])
 
   const loadUsers = async () => {
     setLoading(true)
@@ -45,6 +46,12 @@ export default function AdminUsers() {
     finally { setLoading(false) }
   }
 
+
+  const loadLeagues = async () => {
+    const { data } = await supabase.from('leagues').select('id, name').order('name')
+    setLeagues(data || [])
+  }
+
   const handleWalletAdjust = async () => {
     if (!walletForm.amount || parseFloat(walletForm.amount) <= 0) return toast.error('Enter a valid amount')
     if (!walletForm.reason.trim()) return toast.error('Reason is required')
@@ -58,7 +65,7 @@ export default function AdminUsers() {
       })
       toast.success(`Wallet ${walletForm.type === 'credit' ? 'credited' : 'debited'} successfully`)
       setWalletModal(null)
-      setWalletForm({ amount: '', type: 'credit', reason: '' })
+      setWalletForm({ amount: '', type: 'credit', reason: '', leagueId: '' })
       loadUsers()
     } catch (e) { toast.error(e.message) }
     finally { setAdjusting(false) }
@@ -363,6 +370,26 @@ export default function AdminUsers() {
                   {t}
                 </button>
               ))}
+            </div>
+            {/* League selector — leave blank for global wallet */}
+            <div>
+              <label className="text-xs text-gray-500 font-mono uppercase mb-1 block flex items-center gap-1">
+                <Building2 size={11} /> League (optional — leave blank for global wallet)
+              </label>
+              <select
+                className="input font-mono"
+                value={walletForm.leagueId}
+                onChange={e => setWalletForm(f => ({ ...f, leagueId: e.target.value }))}>
+                <option value="">🌐 Global Wallet</option>
+                {leagues.map(l => (
+                  <option key={l.id} value={l.id}>{l.name}</option>
+                ))}
+              </select>
+              {walletForm.leagueId && (
+                <p className="text-xs text-brand-400 font-mono mt-1">
+                  ✦ Adjusting league credits for selected league only
+                </p>
+              )}
             </div>
             <div>
               <label className="text-xs text-gray-500 font-mono uppercase mb-1 block">Amount (₹)</label>

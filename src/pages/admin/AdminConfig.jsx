@@ -13,7 +13,8 @@ const SECTIONS = [
     title: 'Bet Limits',
     icon: '🎯',
     fields: [
-      { key: 'max_bet_pct',    label: 'Max Bet (% of wallet)', type: 'number', unit: '%', min: 5, max: 100, hint: 'Max % of available balance a user can bet. Spec: 20–30%' },
+      { key: 'min_bet_pct',    label: 'Min Bet (% of wallet)', type: 'number', unit: '%', min: 1, max: 100, hint: 'Minimum % of available balance required to place any bet. e.g. 1 = user must bet at least 1% of their balance' },
+      { key: 'max_bet_pct',    label: 'Max Bet (% of wallet)', type: 'number', unit: '%', min: 5, max: 100, hint: 'Max % of available balance a user can bet. Spec: 20-30%' },
       { key: 'min_wallet_3x',  label: 'Min Wallet for 3×', type: 'number', unit: '₹', hint: 'Minimum balance required to place 3× bets' },
       { key: 'min_wallet_4x',  label: 'Min Wallet for 4×', type: 'number', unit: '₹', hint: 'Minimum balance required to place 4× bets' },
       { key: 'min_wallet_5x',  label: 'Min Wallet for 5×', type: 'number', unit: '₹', hint: 'Minimum balance required to place 5× bets' },
@@ -64,23 +65,8 @@ const SECTIONS = [
     title: 'Inactivity & Decay',
     icon: '📉',
     fields: [
-      {
-        key:   'inactivity_matches',
-        label: 'Inactivity Threshold',
-        type:  'number',
-        unit:  'matches',
-        min:   1,
-        hint:  'Settled matches without a bet (per league) before decay fires. e.g. 3 = miss 3 matches in a row → penalised',
-      },
-      {
-        key:   'wallet_decay_pct',
-        label: 'Wallet Decay per Trigger',
-        type:  'number',
-        unit:  '%',
-        min:   0,
-        max:   100,
-        hint:  '% of league credits deducted each time apply_inactivity runs for an inactive member. Spec: max 2–3%',
-      },
+      { key: 'inactivity_matches', label: 'Inactivity Threshold', type: 'number', unit: 'matches', hint: 'Settled matches missed per league before decay fires. e.g. 3 = miss 3 matches in a row → penalised' },
+      { key: 'wallet_decay_pct', label: 'Wallet Decay per Trigger', type: 'number', unit: '%', hint: '% of league credits deducted each time a member hits the inactivity threshold. Spec: max 2-3%' },
     ],
   },
 ]
