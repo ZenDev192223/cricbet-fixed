@@ -288,7 +288,7 @@ export default function MatchBetPage() {
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="flex items-center gap-1 text-gray-400">
-                        <Trophy size={12} /> If you win
+                        <Trophy size={12} /> Profit if you win
                       </span>
                       <span className="font-mono font-bold text-accent-green">{formatCurrency(winAmount)}</span>
                     </div>

@@ -143,4 +143,4 @@ export const calcLiabilityLock = (amount, multiplier) => {
 }
 
 export const calcWinReturn = (amount, multiplier) =>
-  Math.round(amount * multiplier)
+  Math.round(amount * multiplier - amount)  // profit only, not gross return

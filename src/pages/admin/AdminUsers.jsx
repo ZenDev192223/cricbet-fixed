@@ -57,12 +57,27 @@ export default function AdminUsers() {
     if (!walletForm.reason.trim()) return toast.error('Reason is required')
     setAdjusting(true)
     try {
-      await adminAdjustWallet({
-        userId: walletModal.userId,
-        amount: parseFloat(walletForm.amount),
-        type: walletForm.type,
-        reason: walletForm.reason,
-      })
+      if (walletForm.leagueId) {
+        // ★ League wallet — use SECURITY DEFINER RPC to bypass RLS
+        const { data: { user: adminUser } } = await supabase.auth.getUser()
+        const { error: rpcErr } = await supabase.rpc('admin_adjust_league_wallet', {
+          p_admin_id:  adminUser.id,
+          p_user_id:   walletModal.userId,
+          p_league_id: walletForm.leagueId,
+          p_amount:    parseFloat(walletForm.amount),
+          p_type:      walletForm.type,
+          p_reason:    walletForm.reason,
+        })
+        if (rpcErr) throw rpcErr
+      } else {
+        // Global wallet
+        await adminAdjustWallet({
+          userId: walletModal.userId,
+          amount: parseFloat(walletForm.amount),
+          type: walletForm.type,
+          reason: walletForm.reason,
+        })
+      }
       toast.success(`Wallet ${walletForm.type === 'credit' ? 'credited' : 'debited'} successfully`)
       setWalletModal(null)
       setWalletForm({ amount: '', type: 'credit', reason: '', leagueId: '' })
