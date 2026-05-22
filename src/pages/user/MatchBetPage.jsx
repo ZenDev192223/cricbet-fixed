@@ -70,7 +70,7 @@ export default function MatchBetPage() {
   const winAmount   = betAmount ? calcWinReturn(parseFloat(betAmount) || 0, multiplier)     : 0
   const penaltyPct  = multiplier === 1.5 ? 0 : multiplier === 2 ? 30 : multiplier === 3 ? 50 : multiplier === 4 ? 65 : 80
 
-  const canBet = match?.status === 'upcoming' || match?.status === 'live'
+  const canBet = match?.status === 'upcoming'
 
   const handlePlace = async () => {
     if (!selectedTeam)  return toast.error('Select a team to bet on')
