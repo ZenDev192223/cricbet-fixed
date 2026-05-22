@@ -4,7 +4,7 @@ import Navbar from '../../components/shared/Navbar'
 import { supabase } from '../../lib/supabase'
 import { settleMatch } from '../../lib/api'
 import { IPL_TEAMS } from '../../lib/constants'
-import { Plus, CheckCircle2, Clock, Zap } from 'lucide-react'
+import { Plus, CheckCircle2, Clock, Zap, Radio, TimerOff } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
@@ -25,6 +25,7 @@ export default function AdminMatches() {
   const [settling, setSettling] = useState(null)
   const [form, setForm]         = useState({
     team_a: '', team_b: '', match_date: '', venue: '', league_id: '',
+    auto_live: true, betting_closes_at: '',
   })
   const [leagues, setLeagues]   = useState([])
   const [settleData, setSettleData] = useState({}) // matchId → { result, winning_team }
@@ -46,14 +47,18 @@ export default function AdminMatches() {
     if (!form.team_a || !form.team_b || !form.match_date) return toast.error('Fill required fields')
     if (form.team_a === form.team_b) return toast.error('Teams must be different')
     try {
-      const { error } = await supabase.from('matches').insert({
-        ...form,
-        created_by: user.id,
+      const insertData = {
+        team_a: form.team_a, team_b: form.team_b,
+        match_date: form.match_date, venue: form.venue,
         league_id: form.league_id || null,
-      })
+        created_by: user.id,
+        auto_live: form.auto_live,
+        betting_closes_at: form.betting_closes_at ? form.betting_closes_at : form.match_date,
+      }
+      const { error } = await supabase.from('matches').insert(insertData)
       if (error) throw error
       toast.success('Match created')
-      setForm({ team_a: '', team_b: '', match_date: '', venue: '', league_id: '' })
+      setForm({ team_a: '', team_b: '', match_date: '', venue: '', league_id: '', auto_live: true, betting_closes_at: '' })
       setShowForm(false)
       loadAll()
     } catch (e) { toast.error(e.message) }
@@ -138,6 +143,21 @@ export default function AdminMatches() {
                 <input className="input" placeholder="Stadium name" value={form.venue}
                   onChange={e => setForm(f => ({ ...f, venue: e.target.value }))} />
               </div>
+              <div>
+                <label className="text-xs text-gray-500 font-mono uppercase mb-1 block">Betting Closes At</label>
+                <input className="input" type="datetime-local" value={form.betting_closes_at}
+                  onChange={e => setForm(f => ({ ...f, betting_closes_at: e.target.value }))} />
+                <p className="text-xs text-gray-600 font-mono mt-1">Leave blank = closes at match start</p>
+              </div>
+              <div className="flex items-center gap-3 col-span-2 mt-1">
+                <input type="checkbox" id="auto_live" checked={form.auto_live}
+                  onChange={e => setForm(f => ({ ...f, auto_live: e.target.checked }))}
+                  className="w-4 h-4 accent-orange-500" />
+                <label htmlFor="auto_live" className="text-sm text-gray-300 cursor-pointer">
+                  <span className="font-semibold text-white">Auto-Live</span>
+                  <span className="text-gray-500 ml-2 font-mono text-xs">— server will flip status to live at match_date automatically</span>
+                </label>
+              </div>
               <div className="col-span-2">
                 <label className="text-xs text-gray-500 font-mono uppercase mb-1 block">League (optional)</label>
                 <select className="input" value={form.league_id} onChange={e => setForm(f => ({ ...f, league_id: e.target.value }))}>
@@ -188,6 +208,17 @@ export default function AdminMatches() {
                       </div>
                       {m.winning_team && (
                         <div className="text-xs text-accent-green font-mono mt-1">✓ {m.winning_team} won · {m.result}</div>
+                      )}
+                      {m.status === 'upcoming' && (
+                        <div className="flex items-center gap-3 mt-1">
+                          {m.auto_live
+                            ? <span className="flex items-center gap-1 text-xs text-brand-400 font-mono"><Radio size={10} /> auto-live at {format(new Date(m.match_date), 'h:mm a')}</span>
+                            : <span className="flex items-center gap-1 text-xs text-gray-500 font-mono"><TimerOff size={10} /> manual live only</span>
+                          }
+                          {m.betting_closes_at && m.betting_closes_at !== m.match_date && (
+                            <span className="text-xs text-orange-400 font-mono">betting closes {format(new Date(m.betting_closes_at), 'h:mm a')}</span>
+                          )}
+                        </div>
                       )}
                     </div>
 
