@@ -6,7 +6,7 @@ import Navbar from '../../components/shared/Navbar'
 import MultiplierChip from '../../components/user/MultiplierChip'
 import LoadingSpinner from '../../components/shared/LoadingSpinner'
 import { formatCurrency, calcLiabilityLock, calcWinReturn } from '../../lib/constants'
-import { placeBet } from '../../lib/api'
+import { placeBet, getSystemConfig } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { ArrowLeft, AlertTriangle, Lock, Trophy, Flame, Shield, Info } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -32,22 +32,25 @@ export default function MatchBetPage() {
   const [selectedTeam, setSelectedTeam] = useState(null)
   const [loading, setLoading]           = useState(true)
   const [placing, setPlacing]           = useState(false)
+  const [config, setConfig]             = useState({ max_bet_pct: 25, min_bet_pct: 1 })
 
   useEffect(() => { loadData() }, [matchId, leagueId, user?.id])
 
   const loadData = async () => {
     setLoading(true)
     try {
-      const [matchRes, leagueRes, betRes] = await Promise.all([
+      const [matchRes, leagueRes, betRes, cfg] = await Promise.all([
         supabase.from('matches').select('*').eq('id', matchId).single(),
         supabase.from('leagues').select('*').eq('id', leagueId).single(),
         supabase.from('bets').select('*')
           .eq('user_id', user.id).eq('match_id', matchId).eq('league_id', leagueId)
           .neq('status', 'canceled').maybeSingle(),
+        getSystemConfig(),
       ])
       setMatch(matchRes.data)
       setLeague(leagueRes.data)
       setExistingBet(betRes.data)
+      setConfig(cfg || {})
     } catch {
       toast.error('Failed to load match data')
     } finally {
@@ -65,7 +68,10 @@ export default function MatchBetPage() {
   // Use league-specific credits (not global wallet)
   const leagueBal   = getLeagueCredits(leagueId)
   const available   = parseFloat(leagueBal.credits ?? 0)
-  const maxBetAmt   = Math.floor(available * 0.25)
+  const maxBetPct   = parseFloat(config.max_bet_pct ?? 25) / 100
+  const minBetPct   = parseFloat(config.min_bet_pct ?? 1)  / 100
+  const maxBetAmt   = Math.floor(available * maxBetPct)
+  const minBetAmt   = Math.ceil(available * minBetPct)
   const lockAmount  = betAmount ? calcLiabilityLock(parseFloat(betAmount) || 0, multiplier) : 0
   const winAmount   = betAmount ? calcWinReturn(parseFloat(betAmount) || 0, multiplier)     : 0
   const penaltyPct  = multiplier === 1.5 ? 0 : multiplier === 2 ? 30 : multiplier === 3 ? 50 : multiplier === 4 ? 65 : 80
@@ -75,7 +81,8 @@ export default function MatchBetPage() {
   const handlePlace = async () => {
     if (!selectedTeam)  return toast.error('Select a team to bet on')
     if (!betAmount || parseFloat(betAmount) <= 0) return toast.error('Enter a valid bet amount')
-    if (parseFloat(betAmount) > maxBetAmt) return toast.error(`Max bet is ${formatCurrency(maxBetAmt)} (25% of balance)`)
+    if (parseFloat(betAmount) < minBetAmt) return toast.error(`Min bet is ${formatCurrency(minBetAmt)} (${config.min_bet_pct ?? 1}% of balance)`)
+    if (parseFloat(betAmount) > maxBetAmt) return toast.error(`Max bet is ${formatCurrency(maxBetAmt)} (${config.max_bet_pct ?? 25}% of balance)`)
     if (lockAmount > available) return toast.error('Insufficient league credits (including penalty reserve)')
 
     setPlacing(true)
@@ -235,7 +242,7 @@ export default function MatchBetPage() {
                 <h3 className="text-sm font-mono text-gray-400 uppercase tracking-widest">Amount</h3>
                 <button onClick={() => setBetAmount(String(maxBetAmt))}
                   className="text-xs text-brand-400 hover:text-brand-300 font-mono transition-colors">
-                  Max {formatCurrency(maxBetAmt)}
+                  Max {formatCurrency(maxBetAmt)} ({config.max_bet_pct ?? 25}%)
                 </button>
               </div>
               <div className="relative">
