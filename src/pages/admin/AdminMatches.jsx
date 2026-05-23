@@ -4,7 +4,7 @@ import Navbar from '../../components/shared/Navbar'
 import { supabase } from '../../lib/supabase'
 import { settleMatch } from '../../lib/api'
 import { IPL_TEAMS } from '../../lib/constants'
-import { Plus, CheckCircle2, Clock, Zap, Radio, TimerOff } from 'lucide-react'
+import { Plus, CheckCircle2, Clock, Zap, ChevronDown, ChevronUp, Users, CheckCircle, XCircle } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
@@ -17,16 +17,6 @@ const RESULTS = [
   { value: 'void',      label: 'Void Match' },
 ]
 
-const toUTC = (localStr) => {
-  if (!localStr) return null
-  const [date, time] = localStr.split('T')
-  const [y, mo, d] = date.split('-').map(Number)
-  const [h, min]   = time.split(':').map(Number)
-  const utc = new Date(Date.UTC(y, mo - 1, d, h, min))
-  utc.setUTCMinutes(utc.getUTCMinutes() - 330) // subtract IST offset
-  return utc.toISOString()
-}
-
 export default function AdminMatches() {
   const { user } = useAuthStore()
   const [matches, setMatches]   = useState([])
@@ -35,10 +25,12 @@ export default function AdminMatches() {
   const [settling, setSettling] = useState(null)
   const [form, setForm]         = useState({
     team_a: '', team_b: '', match_date: '', venue: '', league_id: '',
-    auto_live: true, betting_closes_at: '',
   })
   const [leagues, setLeagues]   = useState([])
   const [settleData, setSettleData] = useState({}) // matchId → { result, winning_team }
+  const [expandedBets, setExpandedBets] = useState(null)  // matchId currently expanded
+  const [matchBets, setMatchBets]       = useState({})     // matchId → { betters, nonBetters }
+  const [betsLoading, setBetsLoading]   = useState(false)
 
   useEffect(() => { loadAll() }, [])
 
@@ -53,22 +45,49 @@ export default function AdminMatches() {
     setLoading(false)
   }
 
+  const loadMatchBets = async (match) => {
+    if (expandedBets === match.id) { setExpandedBets(null); return }
+    setBetsLoading(true)
+    setExpandedBets(match.id)
+    try {
+      // Get all members of this match's league
+      const { data: members } = await supabase
+        .from('league_members')
+        .select('user_id, users(display_name, email)')
+        .eq('league_id', match.league_id)
+
+      // Get all bets for this match
+      const { data: bets } = await supabase
+        .from('bets')
+        .select('user_id, bet_team, multiplier, bet_amount, status')
+        .eq('match_id', match.id)
+        .neq('status', 'canceled')
+
+      const bettedIds = new Set((bets || []).map(b => b.user_id))
+      const betMap    = (bets || []).reduce((acc, b) => { acc[b.user_id] = b; return acc }, {})
+
+      const betters    = (members || []).filter(m => bettedIds.has(m.user_id))
+        .map(m => ({ ...m.users, bet: betMap[m.user_id] }))
+      const nonBetters = (members || []).filter(m => !bettedIds.has(m.user_id))
+        .map(m => m.users)
+
+      setMatchBets(prev => ({ ...prev, [match.id]: { betters, nonBetters } }))
+    } catch { toast.error('Failed to load bets') }
+    finally { setBetsLoading(false) }
+  }
+
   const handleCreate = async () => {
     if (!form.team_a || !form.team_b || !form.match_date) return toast.error('Fill required fields')
     if (form.team_a === form.team_b) return toast.error('Teams must be different')
     try {
-      const insertData = {
-        team_a: form.team_a, team_b: form.team_b,
-        match_date: toUTC(form.match_date), venue: form.venue,
-        league_id: form.league_id || null,
+      const { error } = await supabase.from('matches').insert({
+        ...form,
         created_by: user.id,
-        auto_live: form.auto_live,
-        betting_closes_at: form.betting_closes_at ? toUTC(form.betting_closes_at) : toUTC(form.match_date),
-      }
-      const { error } = await supabase.from('matches').insert(insertData)
+        league_id: form.league_id || null,
+      })
       if (error) throw error
       toast.success('Match created')
-      setForm({ team_a: '', team_b: '', match_date: '', venue: '', league_id: '', auto_live: true, betting_closes_at: '' })
+      setForm({ team_a: '', team_b: '', match_date: '', venue: '', league_id: '' })
       setShowForm(false)
       loadAll()
     } catch (e) { toast.error(e.message) }
@@ -153,21 +172,6 @@ export default function AdminMatches() {
                 <input className="input" placeholder="Stadium name" value={form.venue}
                   onChange={e => setForm(f => ({ ...f, venue: e.target.value }))} />
               </div>
-              <div>
-                <label className="text-xs text-gray-500 font-mono uppercase mb-1 block">Betting Closes At</label>
-                <input className="input" type="datetime-local" value={form.betting_closes_at}
-                  onChange={e => setForm(f => ({ ...f, betting_closes_at: e.target.value }))} />
-                <p className="text-xs text-gray-600 font-mono mt-1">Leave blank = closes at match start</p>
-              </div>
-              <div className="flex items-center gap-3 col-span-2 mt-1">
-                <input type="checkbox" id="auto_live" checked={form.auto_live}
-                  onChange={e => setForm(f => ({ ...f, auto_live: e.target.checked }))}
-                  className="w-4 h-4 accent-orange-500" />
-                <label htmlFor="auto_live" className="text-sm text-gray-300 cursor-pointer">
-                  <span className="font-semibold text-white">Auto-Live</span>
-                  <span className="text-gray-500 ml-2 font-mono text-xs">— server will flip status to live at match_date automatically</span>
-                </label>
-              </div>
               <div className="col-span-2">
                 <label className="text-xs text-gray-500 font-mono uppercase mb-1 block">League (optional)</label>
                 <select className="input" value={form.league_id} onChange={e => setForm(f => ({ ...f, league_id: e.target.value }))}>
@@ -219,17 +223,6 @@ export default function AdminMatches() {
                       {m.winning_team && (
                         <div className="text-xs text-accent-green font-mono mt-1">✓ {m.winning_team} won · {m.result}</div>
                       )}
-                      {m.status === 'upcoming' && (
-                        <div className="flex items-center gap-3 mt-1">
-                          {m.auto_live
-                            ? <span className="flex items-center gap-1 text-xs text-brand-400 font-mono"><Radio size={10} /> auto-live at {format(new Date(m.match_date), 'h:mm a')}</span>
-                            : <span className="flex items-center gap-1 text-xs text-gray-500 font-mono"><TimerOff size={10} /> manual live only</span>
-                          }
-                          {m.betting_closes_at && m.betting_closes_at !== m.match_date && (
-                            <span className="text-xs text-orange-400 font-mono">betting closes {format(new Date(m.betting_closes_at), 'h:mm a')}</span>
-                          )}
-                        </div>
-                      )}
                     </div>
 
                     {/* Actions */}
@@ -266,6 +259,76 @@ export default function AdminMatches() {
                         <CheckCircle2 size={14} />
                         {settling === m.id ? 'Settling…' : 'Settle'}
                       </button>
+                    </div>
+                  )}
+
+                  {/* Who bet / who didn't */}
+                  {m.league_id && (
+                    <div className="mt-3 pt-3 border-t border-surface-700">
+                      <button
+                        onClick={() => loadMatchBets(m)}
+                        className="flex items-center gap-2 text-xs text-gray-400 hover:text-white font-mono transition-colors">
+                        <Users size={12} />
+                        {expandedBets === m.id ? 'Hide bets' : 'Show who bet / who didn\'t'}
+                        {expandedBets === m.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                      </button>
+
+                      {expandedBets === m.id && (
+                        <div className="mt-3 grid grid-cols-2 gap-4">
+                          {/* Betters */}
+                          <div>
+                            <div className="flex items-center gap-1.5 mb-2">
+                              <CheckCircle size={12} className="text-accent-green" />
+                              <span className="text-xs font-mono font-semibold text-accent-green uppercase tracking-wider">
+                                Bet ({matchBets[m.id]?.betters?.length ?? 0})
+                              </span>
+                            </div>
+                            {betsLoading && !matchBets[m.id] ? (
+                              <p className="text-xs text-gray-600 font-mono">Loading…</p>
+                            ) : matchBets[m.id]?.betters?.length === 0 ? (
+                              <p className="text-xs text-gray-600 font-mono">Nobody bet yet</p>
+                            ) : (
+                              <div className="space-y-1.5">
+                                {matchBets[m.id]?.betters?.map(u => (
+                                  <div key={u.bet?.user_id} className="flex items-center justify-between bg-surface-700 rounded-lg px-3 py-1.5">
+                                    <div>
+                                      <p className="text-xs text-white font-semibold">{u.display_name}</p>
+                                      <p className="text-xs text-gray-500 font-mono">{u.bet?.bet_team} · {u.bet?.multiplier}×</p>
+                                    </div>
+                                    <span className="text-xs font-mono text-brand-400">₹{u.bet?.bet_amount}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Non-betters */}
+                          <div>
+                            <div className="flex items-center gap-1.5 mb-2">
+                              <XCircle size={12} className="text-accent-red" />
+                              <span className="text-xs font-mono font-semibold text-accent-red uppercase tracking-wider">
+                                Didn\'t Bet ({matchBets[m.id]?.nonBetters?.length ?? 0})
+                              </span>
+                            </div>
+                            {betsLoading && !matchBets[m.id] ? (
+                              <p className="text-xs text-gray-600 font-mono">Loading…</p>
+                            ) : matchBets[m.id]?.nonBetters?.length === 0 ? (
+                              <p className="text-xs text-gray-600 font-mono">Everyone bet ✓</p>
+                            ) : (
+                              <div className="space-y-1.5">
+                                {matchBets[m.id]?.nonBetters?.map(u => (
+                                  <div key={u?.email} className="flex items-center bg-surface-700 rounded-lg px-3 py-1.5">
+                                    <div>
+                                      <p className="text-xs text-white font-semibold">{u?.display_name}</p>
+                                      <p className="text-xs text-gray-500 font-mono">{u?.email}</p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
