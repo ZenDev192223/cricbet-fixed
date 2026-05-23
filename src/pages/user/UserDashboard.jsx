@@ -284,6 +284,11 @@ export default function UserDashboard() {
 
 function MatchCard({ match, leagues }) {
   const isLive = match.status === 'live'
+  // Only show leagues that this match belongs to.
+  // If match.league_id is null the match is global — show all user leagues.
+  const eligibleLeagues = match.league_id
+    ? leagues.filter(l => l.id === match.league_id)
+    : leagues
   return (
     <div className="card-hover p-5">
       {isLive && (
@@ -305,9 +310,9 @@ function MatchCard({ match, leagues }) {
       {match.venue && (
         <div className="text-xs text-gray-600 font-mono mb-4 text-center">{match.venue}</div>
       )}
-      {leagues.length > 0 ? (
+      {eligibleLeagues.length > 0 ? (
         <div className="space-y-1.5">
-          {leagues.map(l => (
+          {eligibleLeagues.map(l => (
             <Link key={l.id} to={`/league/${l.id}/match/${match.id}`}
               className="flex items-center justify-between px-3 py-2 bg-surface-700 rounded-lg hover:bg-surface-600 transition-colors group">
               <span className="text-xs text-gray-400 group-hover:text-white transition-colors">{l.name}</span>
@@ -316,7 +321,7 @@ function MatchCard({ match, leagues }) {
           ))}
         </div>
       ) : (
-        <p className="text-xs text-gray-600 text-center font-mono">Join a league to bet</p>
+        <p className="text-xs text-gray-600 text-center font-mono">You are not in this match's league</p>
       )}
     </div>
   )

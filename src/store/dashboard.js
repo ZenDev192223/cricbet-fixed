@@ -29,13 +29,22 @@ export const useDashboardStore = create((set, get) => ({
   loadDashboard: async (userId) => {
     set({ loading: true })
     try {
-      const [matchRes, leagueRes] = await Promise.all([
-        supabase.from('matches').select('*').in('status', ['upcoming', 'live']).order('match_date'),
-        supabase.from('league_members').select('league_id, credits, locked_credits, leagues(*)').eq('user_id', userId),
-      ])
+      // Fetch user's leagues first, then filter matches to only their leagues
+      const leagueRes  = await supabase
+        .from('league_members')
+        .select('league_id, credits, locked_credits, leagues(*)')
+        .eq('user_id', userId)
 
       const leagueRows = leagueRes.data || []
       const leagues    = leagueRows.map(r => r.leagues).filter(Boolean)
+      const leagueIds  = leagueRows.map(r => r.league_id).filter(Boolean)
+
+      const matchRes   = leagueIds.length > 0
+        ? await supabase.from('matches').select('*')
+            .in('status', ['upcoming', 'live'])
+            .in('league_id', leagueIds)
+            .order('match_date')
+        : { data: [] }
 
       // Build leagueBalances from the direct league_members query (no global wallet needed)
       const leagueBalances = leagueRows.map(r => ({
@@ -123,12 +132,17 @@ export const useDashboardStore = create((set, get) => ({
   },
 
   subscribeMatches: () => {
+    const state = get()
+    const leagueIds = (state.leagueBalances || []).map(b => b.league_id).filter(Boolean)
     const channel = supabase.channel('matches')
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'matches',
       }, async () => {
+        if (!leagueIds.length) return
         const { data } = await supabase.from('matches')
-          .select('*').in('status', ['upcoming', 'live']).order('match_date')
+          .select('*').in('status', ['upcoming', 'live'])
+          .in('league_id', leagueIds)
+          .order('match_date')
         set({ matches: data || [] })
       })
       .subscribe()
