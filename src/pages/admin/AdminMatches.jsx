@@ -59,7 +59,7 @@ export default function AdminMatches() {
       // Get all bets for this match
       const { data: bets } = await supabase
         .from('bets')
-        .select('user_id, bet_team, multiplier, bet_amount, status')
+        .select('user_id, bet_team, multiplier, bet_amount, locked_amount, potential_win, credits_won, status')
         .eq('match_id', match.id)
         .neq('status', 'canceled')
 
@@ -274,59 +274,103 @@ export default function AdminMatches() {
                       </button>
 
                       {expandedBets === m.id && (
-                        <div className="mt-3 grid grid-cols-2 gap-4">
-                          {/* Betters */}
-                          <div>
-                            <div className="flex items-center gap-1.5 mb-2">
-                              <CheckCircle size={12} className="text-accent-green" />
-                              <span className="text-xs font-mono font-semibold text-accent-green uppercase tracking-wider">
-                                Bet ({matchBets[m.id]?.betters?.length ?? 0})
-                              </span>
-                            </div>
-                            {betsLoading && !matchBets[m.id] ? (
-                              <p className="text-xs text-gray-600 font-mono">Loading…</p>
-                            ) : matchBets[m.id]?.betters?.length === 0 ? (
-                              <p className="text-xs text-gray-600 font-mono">Nobody bet yet</p>
-                            ) : (
-                              <div className="space-y-1.5">
-                                {matchBets[m.id]?.betters?.map(u => (
-                                  <div key={u.bet?.user_id} className="flex items-center justify-between bg-surface-700 rounded-lg px-3 py-1.5">
-                                    <div>
-                                      <p className="text-xs text-white font-semibold">{u.display_name}</p>
-                                      <p className="text-xs text-gray-500 font-mono">{u.bet?.bet_team} · {u.bet?.multiplier}×</p>
-                                    </div>
-                                    <span className="text-xs font-mono text-brand-400">₹{u.bet?.bet_amount}</span>
-                                  </div>
-                                ))}
+                        <div className="mt-3">
+                          {betsLoading && !matchBets[m.id] ? (
+                            <p className="text-xs text-gray-500 font-mono py-2">Loading…</p>
+                          ) : (
+                            <>
+                              {/* Bets table */}
+                              <div className="overflow-x-auto rounded-lg border border-surface-600 mb-4">
+                                <table className="w-full text-xs font-mono">
+                                  <thead>
+                                    <tr className="bg-surface-700 text-gray-400 uppercase tracking-wider">
+                                      <th className="text-left px-3 py-2">Player</th>
+                                      <th className="text-left px-3 py-2">Bet On</th>
+                                      <th className="text-right px-3 py-2">Multi</th>
+                                      <th className="text-right px-3 py-2">Bet Amt</th>
+                                      <th className="text-right px-3 py-2">Locked</th>
+                                      <th className="text-right px-3 py-2">Result</th>
+                                      <th className="text-right px-3 py-2">P&L</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-surface-700">
+                                    {matchBets[m.id]?.betters?.length === 0 ? (
+                                      <tr><td colSpan={7} className="text-center text-gray-600 py-4">Nobody bet on this match</td></tr>
+                                    ) : matchBets[m.id]?.betters?.map(u => {
+                                      const b = u.bet
+                                      const won  = b?.status === 'won'
+                                      const lost = b?.status === 'lost'
+                                      const pnl  = won
+                                        ? `+₹${parseFloat(b?.credits_won ?? 0).toLocaleString('en-IN')}`
+                                        : lost
+                                        ? `-₹${parseFloat(b?.locked_amount ?? 0).toLocaleString('en-IN')}`
+                                        : '—'
+                                      return (
+                                        <tr key={u.email} className="hover:bg-surface-700/50 transition-colors">
+                                          <td className="px-3 py-2 text-white font-semibold">{u.display_name}</td>
+                                          <td className="px-3 py-2 text-gray-300">{b?.bet_team}</td>
+                                          <td className="px-3 py-2 text-right text-brand-400">{b?.multiplier}×</td>
+                                          <td className="px-3 py-2 text-right text-white">₹{parseFloat(b?.bet_amount ?? 0).toLocaleString('en-IN')}</td>
+                                          <td className="px-3 py-2 text-right text-orange-400">₹{parseFloat(b?.locked_amount ?? 0).toLocaleString('en-IN')}</td>
+                                          <td className="px-3 py-2 text-right">
+                                            {won  && <span className="text-accent-green font-bold">WON</span>}
+                                            {lost && <span className="text-accent-red font-bold">LOST</span>}
+                                            {b?.status === 'pending'   && <span className="text-gray-400">Pending</span>}
+                                            {b?.status === 'refunded'  && <span className="text-yellow-400">Refunded</span>}
+                                          </td>
+                                          <td className={`px-3 py-2 text-right font-bold ${won ? 'text-accent-green' : lost ? 'text-accent-red' : 'text-gray-500'}`}>
+                                            {pnl}
+                                          </td>
+                                        </tr>
+                                      )
+                                    })}
+                                  </tbody>
+                                  {/* Summary row */}
+                                  {matchBets[m.id]?.betters?.length > 0 && (() => {
+                                    const bets = matchBets[m.id].betters.map(u => u.bet)
+                                    const totalBet    = bets.reduce((s, b) => s + parseFloat(b?.bet_amount   ?? 0), 0)
+                                    const totalLocked = bets.reduce((s, b) => s + parseFloat(b?.locked_amount ?? 0), 0)
+                                    const totalWon    = bets.filter(b => b?.status === 'won').reduce((s, b)  => s + parseFloat(b?.credits_won   ?? 0), 0)
+                                    const totalLost   = bets.filter(b => b?.status === 'lost').reduce((s, b) => s + parseFloat(b?.locked_amount ?? 0), 0)
+                                    return (
+                                      <tfoot>
+                                        <tr className="bg-surface-700 text-gray-300 font-semibold">
+                                          <td className="px-3 py-2" colSpan={3}>Totals ({bets.length} bets)</td>
+                                          <td className="px-3 py-2 text-right text-white">₹{totalBet.toLocaleString('en-IN')}</td>
+                                          <td className="px-3 py-2 text-right text-orange-400">₹{totalLocked.toLocaleString('en-IN')}</td>
+                                          <td className="px-3 py-2" />
+                                          <td className="px-3 py-2 text-right">
+                                            {totalWon  > 0 && <span className="text-accent-green">+₹{totalWon.toLocaleString('en-IN')} </span>}
+                                            {totalLost > 0 && <span className="text-accent-red">-₹{totalLost.toLocaleString('en-IN')}</span>}
+                                          </td>
+                                        </tr>
+                                      </tfoot>
+                                    )
+                                  })()}
+                                </table>
                               </div>
-                            )}
-                          </div>
 
-                          {/* Non-betters */}
-                          <div>
-                            <div className="flex items-center gap-1.5 mb-2">
-                              <XCircle size={12} className="text-accent-red" />
-                              <span className="text-xs font-mono font-semibold text-accent-red uppercase tracking-wider">
-                                Didn\'t Bet ({matchBets[m.id]?.nonBetters?.length ?? 0})
-                              </span>
-                            </div>
-                            {betsLoading && !matchBets[m.id] ? (
-                              <p className="text-xs text-gray-600 font-mono">Loading…</p>
-                            ) : matchBets[m.id]?.nonBetters?.length === 0 ? (
-                              <p className="text-xs text-gray-600 font-mono">Everyone bet ✓</p>
-                            ) : (
-                              <div className="space-y-1.5">
-                                {matchBets[m.id]?.nonBetters?.map(u => (
-                                  <div key={u?.email} className="flex items-center bg-surface-700 rounded-lg px-3 py-1.5">
-                                    <div>
-                                      <p className="text-xs text-white font-semibold">{u?.display_name}</p>
-                                      <p className="text-xs text-gray-500 font-mono">{u?.email}</p>
-                                    </div>
+                              {/* Didn't bet */}
+                              {matchBets[m.id]?.nonBetters?.length > 0 && (
+                                <div>
+                                  <div className="flex items-center gap-1.5 mb-2">
+                                    <XCircle size={12} className="text-accent-red" />
+                                    <span className="text-xs font-mono font-semibold text-accent-red uppercase tracking-wider">
+                                      Didn\'t Bet ({matchBets[m.id].nonBetters.length})
+                                    </span>
                                   </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    {matchBets[m.id].nonBetters.map(u => (
+                                      <div key={u?.email} className="flex items-center gap-2 bg-surface-700 rounded-lg px-3 py-1.5">
+                                        <span className="text-xs text-white font-semibold">{u?.display_name}</span>
+                                        <span className="text-xs text-gray-500">{u?.email}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          )}
                         </div>
                       )}
                     </div>
