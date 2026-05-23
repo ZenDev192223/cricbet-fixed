@@ -23,10 +23,13 @@ export default function DonationPage() {
   const [sending, setSending]                   = useState(false)
   const [history, setHistory]                   = useState([])
   const [loadingHistory, setLoadingHistory]     = useState(true)
+  const [weeklyCapVal, setWeeklyCap]            = useState(1000)
 
   useEffect(() => {
     loadHistory()
-    // Default to first league if available
+    // Fetch weekly cap from system_config
+    supabase.from('system_config').select('value').eq('key', 'donation_weekly_cap').single()
+      .then(({ data }) => { if (data) setWeeklyCap(parseFloat(data.value)) })
     if (leagues.length > 0 && !selectedLeagueId) {
       setSelectedLeagueId(leagues[0].id)
     }
@@ -189,7 +192,6 @@ export default function DonationPage() {
                 </button>
               </div>
               {foundUser && (() => {
-                const weeklyCapVal  = 1000 // from config — matches donation_weekly_cap
                 const received      = parseFloat(foundUser.week_received ?? 0)
                 const remaining     = Math.max(0, weeklyCapVal - received)
                 const pct           = (received / weeklyCapVal) * 100

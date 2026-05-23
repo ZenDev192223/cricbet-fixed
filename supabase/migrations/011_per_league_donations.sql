@@ -176,3 +176,12 @@ BEGIN
   RETURN jsonb_build_object('success', true, 'donation_id', v_donation_id);
 END;
 $$;
+
+
+-- ── FIX: Drop old process_donation signature to remove ambiguity ─────────────
+-- The old function had params in order: sender, receiver, amount, note, sender_ip
+-- New one has: sender, receiver, amount, note, league_id, sender_ip
+-- Postgres can't disambiguate — drop the old one explicitly.
+
+DROP FUNCTION IF EXISTS process_donation(UUID, UUID, NUMERIC, TEXT, TEXT);
+DROP FUNCTION IF EXISTS process_donation(UUID, UUID, NUMERIC, TEXT, UUID, TEXT);
