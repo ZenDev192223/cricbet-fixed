@@ -58,7 +58,7 @@ BEGIN
   INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, note)
   VALUES (
     p_user_id,
-    CASE WHEN p_type = 'credit' THEN 'admin_credit' ELSE 'admin_debit' END,
+    CASE WHEN p_type = 'credit' THEN 'admin_credit' ELSE 'admin_debit' END::transaction_type,
     p_amount,
     v_member.credits,
     v_new_bal,

@@ -17,6 +17,16 @@ const RESULTS = [
   { value: 'void',      label: 'Void Match' },
 ]
 
+const toUTC = (localStr) => {
+  if (!localStr) return null
+  const [date, time] = localStr.split('T')
+  const [y, mo, d] = date.split('-').map(Number)
+  const [h, min]   = time.split(':').map(Number)
+  const utc = new Date(Date.UTC(y, mo - 1, d, h, min))
+  utc.setUTCMinutes(utc.getUTCMinutes() - 330) // subtract IST offset
+  return utc.toISOString()
+}
+
 export default function AdminMatches() {
   const { user } = useAuthStore()
   const [matches, setMatches]   = useState([])
@@ -49,11 +59,11 @@ export default function AdminMatches() {
     try {
       const insertData = {
         team_a: form.team_a, team_b: form.team_b,
-        match_date: form.match_date, venue: form.venue,
+        match_date: toUTC(form.match_date), venue: form.venue,
         league_id: form.league_id || null,
         created_by: user.id,
         auto_live: form.auto_live,
-        betting_closes_at: form.betting_closes_at ? form.betting_closes_at : form.match_date,
+        betting_closes_at: form.betting_closes_at ? toUTC(form.betting_closes_at) : toUTC(form.match_date),
       }
       const { error } = await supabase.from('matches').insert(insertData)
       if (error) throw error
