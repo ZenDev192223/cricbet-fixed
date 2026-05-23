@@ -57,14 +57,18 @@ export default function DonationPage() {
         // Verify they are in the selected league
         if (selectedLeagueId) {
           const { data: mem } = await supabase.from('league_members')
-            .select('id').eq('user_id', data.id).eq('league_id', selectedLeagueId).maybeSingle()
+            .select('id, week_received, week_reset_at').eq('user_id', data.id).eq('league_id', selectedLeagueId).maybeSingle()
           if (!mem) {
             toast.error('This player is not a member of the selected league')
             setSearching(false)
             return
           }
+          // Attach cap info to foundUser
+          setFoundUser({ ...data, week_received: mem.week_received ?? 0, week_reset_at: mem.week_reset_at })
+          setSearching(false)
+          return
         }
-        setFoundUser(data)
+        setFoundUser({ ...data, week_received: 0 })
       } else {
         toast.error('User not found')
       }
@@ -184,17 +188,48 @@ export default function DonationPage() {
                   {searching ? '…' : 'Search'}
                 </button>
               </div>
-              {foundUser && (
-                <div className="mt-2 flex items-center gap-3 p-3 bg-accent-green/10 border border-accent-green/30 rounded-xl animate-in">
-                  <div className="w-8 h-8 bg-accent-green/20 rounded-full flex items-center justify-center font-bold text-accent-green text-sm">
-                    {foundUser.display_name[0]?.toUpperCase()}
+              {foundUser && (() => {
+                const weeklyCapVal  = 1000 // from config — matches donation_weekly_cap
+                const received      = parseFloat(foundUser.week_received ?? 0)
+                const remaining     = Math.max(0, weeklyCapVal - received)
+                const pct           = (received / weeklyCapVal) * 100
+                const capColor      = pct >= 100 ? 'text-accent-red' : pct >= 60 ? 'text-yellow-400' : 'text-accent-green'
+                const barColor      = pct >= 100 ? 'bg-accent-red' : pct >= 60 ? 'bg-yellow-400' : 'bg-accent-green'
+                const borderColor   = pct >= 100 ? 'border-accent-red/40' : pct >= 60 ? 'border-yellow-400/30' : 'border-accent-green/30'
+                const bgColor       = pct >= 100 ? 'bg-accent-red/10' : pct >= 60 ? 'bg-yellow-400/10' : 'bg-accent-green/10'
+                return (
+                  <div className={`mt-2 p-3 border rounded-xl animate-in ${bgColor} ${borderColor}`}>
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${bgColor} ${capColor}`}>
+                        {foundUser.display_name[0]?.toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="font-semibold text-white text-sm">{foundUser.display_name}</div>
+                        <div className="text-xs text-gray-400">{foundUser.email}</div>
+                      </div>
+                    </div>
+                    {/* Weekly cap bar */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs font-mono mb-1">
+                        <span className="text-gray-400">Weekly cap</span>
+                        <span className={capColor}>{Math.round(pct)}% used</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-surface-700 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${barColor}`}
+                          style={{ width: `${Math.min(pct, 100)}%` }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-xs font-mono mt-1">
+                        <span className="text-gray-500">{formatCurrency(received)} used of {formatCurrency(weeklyCapVal)}</span>
+                        <span className={capColor}>
+                          {pct >= 100 ? 'Cap reached' : `${formatCurrency(remaining)} left`}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="font-semibold text-white text-sm">{foundUser.display_name}</div>
-                    <div className="text-xs text-gray-400">{foundUser.email}</div>
-                  </div>
-                </div>
-              )}
+                )
+              })()}
             </div>
 
             {/* Amount */}
